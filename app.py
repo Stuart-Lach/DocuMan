@@ -100,12 +100,71 @@ def upload():
     data = {
         "zip_name": f.filename,
         "scan_results": scan_results,
+        "selected_files": None,          # None = all selected (set after /select-files)
         "replacements": [],
         "csv_operation": {"operation": "skip"},
         "previous_values": load_history(),
     }
     save_data(sid, data)
 
+    return redirect(url_for("select_files"))
+
+
+# ── Step 1b – File Selection ─────────────────────────────────────────────────
+
+def build_file_groups(scan_results):
+    """Group scan_results by their top-level directory for the file-tree UI."""
+    from collections import OrderedDict
+    groups = OrderedDict()
+    for sr in scan_results:
+        parts = sr["file"].split("/")
+        top = parts[0] if len(parts) > 1 else "__root__"
+        if top not in groups:
+            groups[top] = {
+                "name": top if top != "__root__" else "Root",
+                "is_root": top == "__root__",
+                "files": [],
+            }
+        subpath = "/".join(parts[1:-1])
+        groups[top]["files"].append({
+            "file":      sr["file"],
+            "name":      parts[-1],
+            "subpath":   (subpath + "/") if subpath else "",
+            "type":      sr["type"],
+            "key_count": len(sr.get("keys", [])),
+        })
+    return list(groups.values())
+
+
+@app.route("/select-files", methods=["GET"])
+def select_files():
+    sid = get_sid()
+    if not sid:
+        return redirect(url_for("index"))
+    data        = load_data(sid)
+    scan_results = data.get("scan_results", [])
+    prev_sel     = data.get("selected_files", None)
+    # Default: everything selected; preserve Back-button state if previously set
+    selected_set = set(prev_sel) if prev_sel is not None else {sr["file"] for sr in scan_results}
+    return render_template(
+        "select_files.html",
+        step=1,
+        file_groups=build_file_groups(scan_results),
+        selected_set=selected_set,
+        total_files=len(scan_results),
+        zip_name=data.get("zip_name", ""),
+    )
+
+
+@app.route("/select-files", methods=["POST"])
+def select_files_post():
+    sid = get_sid()
+    if not sid:
+        return redirect(url_for("index"))
+    selected = request.form.getlist("selected_file")
+    data = load_data(sid)
+    data["selected_files"] = selected
+    save_data(sid, data)
     return redirect(url_for("step2"))
 
 
@@ -116,11 +175,17 @@ def step2():
     sid = get_sid()
     if not sid:
         return redirect(url_for("index"))
-    data = load_data(sid)
+    data         = load_data(sid)
+    scan_results = data.get("scan_results", [])
+    selected     = data.get("selected_files", None)
+    # Filter to only the files the user chose on the selection screen
+    if selected is not None:
+        sel_set      = set(selected)
+        scan_results = [r for r in scan_results if r["file"] in sel_set]
     return render_template(
         "step2.html",
         step=2,
-        scan_results=data.get("scan_results", []),
+        scan_results=scan_results,
         previous_values=data.get("previous_values", []),
     )
 

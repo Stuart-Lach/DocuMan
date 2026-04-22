@@ -1,0 +1,198 @@
+{% extends "base.html" %}
+{% block content %}
+
+<div class="card">
+  <div class="card-header">
+    <h2 class="card-title">Select Files to Edit</h2>
+    <p class="card-subtitle">
+      Found <strong>{{ total_files }}</strong> editable file{{ 's' if total_files != 1 else '' }}
+      in <strong>{{ zip_name }}</strong>.
+      Choose which files to include in this editing session — others will be carried through unchanged.
+    </p>
+  </div>
+
+  {% if not file_groups %}
+  <div class="alert alert-info" style="margin:1.25rem 2rem 0">
+    No editable files (txt, csv, json, xml, ini, cfg, yaml, yml) were found inside this ZIP.
+    You can still continue to configure a CSV column operation.
+  </div>
+  {% endif %}
+
+  <form method="POST" action="/select-files" id="select-files-form">
+
+    {% if file_groups %}
+    <!-- ── Global controls ── -->
+    <div class="file-tree-controls">
+      <button type="button" class="btn btn-sm btn-ghost" onclick="selectAllFiles(true)">
+        <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><rect x="1" y="1" width="11" height="11" rx="2" stroke="currentColor" stroke-width="1.5"/><path d="M3 6.5l2.5 2.5 4.5-4.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        Select all
+      </button>
+      <button type="button" class="btn btn-sm btn-ghost" onclick="selectAllFiles(false)">
+        <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><rect x="1" y="1" width="11" height="11" rx="2" stroke="currentColor" stroke-width="1.5"/></svg>
+        Deselect all
+      </button>
+      <span class="file-sel-count" id="file-sel-count"></span>
+    </div>
+
+    <!-- ── File tree ── -->
+    <div class="file-tree" id="file-tree">
+      {% for group in file_groups %}
+      {% set gidx = loop.index %}
+
+      <div class="file-group">
+
+        <!-- Group header -->
+        <div class="file-group-header" onclick="toggleGroup(this)">
+          <div class="file-group-header-left">
+            <input type="checkbox"
+                   class="group-check-all"
+                   data-group="{{ gidx }}"
+                   onchange="onGroupCheckAll(this)"
+                   onclick="event.stopPropagation()"
+                   title="Select / deselect all files in this folder" />
+
+            <svg class="group-toggle-icon" width="16" height="16" viewBox="0 0 16 16" fill="none">
+              <path d="M4 6l4 4 4-4" stroke="currentColor" stroke-width="1.8"
+                    stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+
+            {% if group.is_root %}
+            <svg width="17" height="17" viewBox="0 0 17 17" fill="none">
+              <path d="M2 14V7l6.5-5L15 7v7H2z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/>
+            </svg>
+            {% else %}
+            <svg width="17" height="17" viewBox="0 0 17 17" fill="none">
+              <path d="M2 14V5h5l2 2h6v7H2z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/>
+            </svg>
+            {% endif %}
+
+            <span class="group-name">{{ group.name }}/</span>
+          </div>
+          <span class="group-file-count">
+            {{ group.files | length }} file{{ 's' if group.files | length != 1 else '' }}
+          </span>
+        </div>
+
+        <!-- Files list -->
+        <div class="file-group-body">
+          {% for f in group.files %}
+          <label class="file-item">
+            <input type="checkbox"
+                   name="selected_file"
+                   value="{{ f.file }}"
+                   class="file-check"
+                   data-group-id="{{ gidx }}"
+                   {% if f.file in selected_set %}checked{% endif %}
+                   onchange="onFileCheckChange(this, {{ gidx }})" />
+
+            <div class="file-item-info">
+              <div class="file-item-name">
+                {% if f.subpath %}
+                  <span class="file-subpath">{{ f.subpath }}</span>
+                {% endif %}
+                <span class="file-basename">{{ f.name }}</span>
+              </div>
+              <div class="file-item-meta">
+                <span class="badge">{{ f.type | upper }}</span>
+                <span class="file-key-count">
+                  {{ f.key_count }} editable field{{ 's' if f.key_count != 1 else '' }}
+                </span>
+              </div>
+            </div>
+
+            <!-- Full path tooltip -->
+            <span class="file-full-path" title="{{ f.file }}">{{ f.file }}</span>
+          </label>
+          {% endfor %}
+        </div>
+
+      </div>
+      {% endfor %}
+    </div>
+    {% endif %}
+
+    <div class="form-actions form-actions-nav" style="margin-top:1.5rem">
+      <a href="/" class="btn btn-ghost">← Upload different ZIP</a>
+      <button type="submit" class="btn btn-primary" id="sel-continue-btn"
+              onclick="return validateFileSelection()">
+        Configure Replacements →
+      </button>
+    </div>
+
+  </form>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+  // Initialise group checkboxes to reflect pre-checked state
+  document.querySelectorAll('.file-group').forEach((group, i) => {
+    syncGroupCheckbox(i + 1);
+  });
+  updateFileCount();
+});
+
+function toggleGroup(header) {
+  const group = header.closest('.file-group');
+  const body  = group.querySelector('.file-group-body');
+  const icon  = header.querySelector('.group-toggle-icon');
+  const isOpen = body.style.display !== 'none';
+  body.style.display    = isOpen ? 'none' : '';
+  icon.style.transform  = isOpen ? 'rotate(-90deg)' : '';
+}
+
+function onGroupCheckAll(cb) {
+  const gid    = cb.dataset.group;
+  const checks = document.querySelectorAll(`.file-check[data-group-id="${gid}"]`);
+  checks.forEach(c => c.checked = cb.checked);
+  cb.indeterminate = false;
+  updateFileCount();
+}
+
+function onFileCheckChange(cb, gid) {
+  syncGroupCheckbox(gid);
+  updateFileCount();
+}
+
+function syncGroupCheckbox(gid) {
+  const groupCb = document.querySelector(`.group-check-all[data-group="${gid}"]`);
+  const checks  = document.querySelectorAll(`.file-check[data-group-id="${gid}"]`);
+  if (!groupCb || !checks.length) return;
+  const checkedCount = Array.from(checks).filter(c => c.checked).length;
+  groupCb.checked       = (checkedCount === checks.length);
+  groupCb.indeterminate = (checkedCount > 0 && checkedCount < checks.length);
+}
+
+function selectAllFiles(checked) {
+  document.querySelectorAll('.file-check').forEach(c => c.checked = checked);
+  document.querySelectorAll('.group-check-all').forEach(c => {
+    c.checked = checked;
+    c.indeterminate = false;
+  });
+  updateFileCount();
+}
+
+function updateFileCount() {
+  const total    = document.querySelectorAll('.file-check').length;
+  const selected = document.querySelectorAll('.file-check:checked').length;
+  const el = document.getElementById('file-sel-count');
+  if (el) el.textContent = `${selected} of ${total} selected`;
+  // Dim continue button when nothing selected
+  const btn = document.getElementById('sel-continue-btn');
+  if (btn) btn.disabled = (total > 0 && selected === 0);
+}
+
+function validateFileSelection() {
+  const total    = document.querySelectorAll('.file-check').length;
+  const selected = document.querySelectorAll('.file-check:checked').length;
+  if (total > 0 && selected === 0) {
+    alert('Please select at least one file to edit, or upload a different ZIP.');
+    return false;
+  }
+  return true;
+}
+</script>
+{% endblock %}
+
