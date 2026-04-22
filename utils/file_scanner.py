@@ -58,10 +58,17 @@ def _scan_csv(file_path, relative_path):
     with open(file_path, "r", encoding="utf-8", errors="replace", newline="") as f:
         reader = csv.reader(f)
         headers = next(reader, [])
-    keys = [
-        {"key": h, "original_value": h, "display": f"Column: {h}"}
-        for h in headers if h.strip()
-    ]
+        first_row = next(reader, [])   # peek at first data row for sample values
+    keys = []
+    for i, h in enumerate(headers):
+        if not h.strip():
+            continue
+        sample = first_row[i].strip() if i < len(first_row) else ""
+        keys.append({
+            "key": h,
+            "original_value": sample,  # first data value — shown as "Old Value" hint
+            "display": f"Column: {h}" + (f"  (e.g. \"{sample}\")" if sample else ""),
+        })
     return {"file": relative_path, "type": "csv", "keys": keys[:MAX_KEYS]}
 
 

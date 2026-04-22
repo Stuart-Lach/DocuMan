@@ -131,27 +131,29 @@ def step2_post():
     if not sid:
         return redirect(url_for("index"))
 
-    rep_files = request.form.getlist("rep_file")
-    rep_keys = request.form.getlist("rep_key")
-    rep_values = request.form.getlist("rep_new_value")
-    rep_orig = request.form.getlist("rep_orig_value")
-    rep_types = request.form.getlist("rep_file_type")
+    rep_files      = request.form.getlist("rep_file")
+    rep_keys       = request.form.getlist("rep_key")
+    rep_find_vals  = request.form.getlist("rep_find_value")
+    rep_values     = request.form.getlist("rep_new_value")
+    rep_types      = request.form.getlist("rep_file_type")
 
     data = load_data(sid)
     previous_values = data.get("previous_values", [])
     replacements = []
 
     for i in range(len(rep_files)):
-        key = rep_keys[i] if i < len(rep_keys) else ""
-        val = rep_values[i] if i < len(rep_values) else ""
+        key      = rep_keys[i]      if i < len(rep_keys)      else ""
+        val      = rep_values[i]    if i < len(rep_values)    else ""
+        find_val = rep_find_vals[i] if i < len(rep_find_vals) else ""
         if not key or not val:
             continue
         replacements.append({
-            "file": rep_files[i],
-            "key": key,
-            "new_value": val,
-            "original_value": rep_orig[i] if i < len(rep_orig) else "",
-            "file_type": rep_types[i] if i < len(rep_types) else "",
+            "file":           rep_files[i],
+            "key":            key,
+            "find_value":     find_val,
+            "original_value": find_val,   # kept for step4 display
+            "new_value":      val,
+            "file_type":      rep_types[i] if i < len(rep_types) else "",
         })
         if val not in previous_values:
             previous_values.append(val)

@@ -74,10 +74,12 @@
 
             <!-- Old value -->
             <td class="col-old">
-              {% if rep.original_value %}
+              {% if rep.find_value %}
+                <span class="value-old">{{ rep.find_value }}</span>
+              {% elif rep.original_value %}
                 <span class="value-old">{{ rep.original_value }}</span>
               {% else %}
-                <span class="value-empty">(no previous value)</span>
+                <span class="value-empty">(any matching value)</span>
               {% endif %}
             </td>
 

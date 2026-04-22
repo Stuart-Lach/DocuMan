@@ -17,6 +17,11 @@ def _full(extract_dir, rel_path):
     return os.path.normpath(os.path.join(extract_dir, *rel_path.split("/")))
 
 
+def _fv(rep):
+    """Return the find_value for a replacement, falling back to original_value."""
+    return rep.get("find_value") or rep.get("original_value") or ""
+
+
 def apply_replacements(extract_dir, replacements):
     """Apply a list of replacement dicts to files inside extract_dir."""
     by_file = {}
@@ -45,73 +50,102 @@ def apply_replacements(extract_dir, replacements):
             pass
 
 
-# ── CSV ─────────────────────────────────────────────────────────────────────
+# ── CSV ──────────────────────────────────────────────────────────────────────
+# Strategy:
+#   • key       = column name
+#   • find_value = the cell value to search for within that column
+#   • new_value  = replacement cell value
+#   • If find_value == key (i.e. user is renaming the header itself), rename it.
+#   • Otherwise replace only cells in the column that exactly match find_value.
 
 def _apply_csv(file_path, reps):
     with open(file_path, "r", encoding="utf-8", errors="replace", newline="") as f:
-        reader = csv.reader(f)
+        reader = csv.DictReader(f)
         rows = list(reader)
-    if not rows:
-        return
-    headers = rows[0]
+        headers = list(reader.fieldnames or [])
+
     for rep in reps:
-        old_key = rep["key"]
-        new_val = rep["new_value"]
-        if old_key in headers:
-            headers[headers.index(old_key)] = new_val
-    rows[0] = headers
+        col      = rep["key"]
+        find_val = _fv(rep)
+        new_val  = rep["new_value"]
+
+        if col not in headers:
+            continue
+
+        if find_val == col or not find_val:
+            # ── Rename the column header ──
+            idx = headers.index(col)
+            headers[idx] = new_val
+            for row in rows:
+                if col in row:
+                    row[new_val] = row.pop(col)
+        else:
+            # ── Replace matching cell values inside this column only ──
+            for row in rows:
+                if row.get(col) == find_val:
+                    row[col] = new_val
+
     with open(file_path, "w", encoding="utf-8", newline="") as f:
-        csv.writer(f).writerows(rows)
+        writer = csv.DictWriter(f, fieldnames=headers)
+        writer.writeheader()
+        writer.writerows(rows)
 
 
-# ── INI ──────────────────────────────────────────────────────────────────────
+# ── INI ───────────────────────────────────────────────────────────────────────
 
 def _apply_ini(file_path, reps):
     config = configparser.ConfigParser()
     config.read(file_path, encoding="utf-8")
     for rep in reps:
         parts = rep["key"].split(".", 1)
-        if len(parts) == 2:
-            section, key = parts
-            if config.has_section(section) and config.has_option(section, key):
-                config.set(section, key, rep["new_value"])
+        if len(parts) != 2:
+            continue
+        section, key = parts
+        if not (config.has_section(section) and config.has_option(section, key)):
+            continue
+        find_val = _fv(rep)
+        current  = config.get(section, key)
+        # Only replace if find_value matches (or was not specified)
+        if not find_val or current == find_val:
+            config.set(section, key, rep["new_value"])
     with open(file_path, "w", encoding="utf-8") as f:
         config.write(f)
 
 
-# ── JSON ─────────────────────────────────────────────────────────────────────
+# ── JSON ──────────────────────────────────────────────────────────────────────
 
 def _apply_json(file_path, reps):
     with open(file_path, "r", encoding="utf-8") as f:
         data = json.load(f)
     for rep in reps:
-        _set_nested(data, rep["key"].split("."), rep["new_value"])
+        _set_nested(data, rep["key"].split("."), rep["new_value"], _fv(rep))
     with open(file_path, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=2, ensure_ascii=False)
 
 
-def _set_nested(obj, path, value):
+def _set_nested(obj, path, value, find_val=""):
     if not path:
         return
     key = path[0]
-    # Handle array index like key[0]
     m = re.match(r"^(.*)\[(\d+)\]$", key)
     if m:
         real_key, idx = m.group(1), int(m.group(2))
         target = obj.get(real_key) if isinstance(obj, dict) and real_key else obj
         if isinstance(target, list) and idx < len(target):
             if len(path) == 1:
-                target[idx] = value
+                if not find_val or str(target[idx]) == find_val:
+                    target[idx] = value
             else:
-                _set_nested(target[idx], path[1:], value)
+                _set_nested(target[idx], path[1:], value, find_val)
     elif isinstance(obj, dict) and key in obj:
         if len(path) == 1:
-            obj[key] = value
+            if not find_val or str(obj[key]) == find_val:
+                obj[key] = value
         else:
-            _set_nested(obj[key], path[1:], value)
+            _set_nested(obj[key], path[1:], value, find_val)
 
 
-# ── YAML ─────────────────────────────────────────────────────────────────────
+# ── YAML ──────────────────────────────────────────────────────────────────────
 
 def _apply_yaml(file_path, reps):
     if not HAS_YAML:
@@ -119,12 +153,12 @@ def _apply_yaml(file_path, reps):
     with open(file_path, "r", encoding="utf-8") as f:
         data = yaml.safe_load(f)
     for rep in reps:
-        _set_nested(data, rep["key"].split("."), rep["new_value"])
+        _set_nested(data, rep["key"].split("."), rep["new_value"], _fv(rep))
     with open(file_path, "w", encoding="utf-8") as f:
         yaml.dump(data, f, default_flow_style=False, allow_unicode=True)
 
 
-# ── XML ──────────────────────────────────────────────────────────────────────
+# ── XML ───────────────────────────────────────────────────────────────────────
 
 def _apply_xml(file_path, reps):
     tree = ET.parse(file_path)
@@ -135,56 +169,71 @@ def _apply_xml(file_path, reps):
         return t.split("}")[-1] if "}" in t else t
 
     for rep in reps:
-        key = rep["key"]
-        new_val = rep["new_value"]
+        key      = rep["key"]
+        new_val  = rep["new_value"]
+        find_val = _fv(rep)
+
         if "@" in key:
             path_part, attr = key.rsplit("@", 1)
             target_tag = path_part.split("/")[-1]
             for elem in root.iter():
-                if tag_name(elem) == target_tag:
-                    if attr in elem.attrib:
+                if tag_name(elem) == target_tag and attr in elem.attrib:
+                    if not find_val or elem.attrib[attr] == find_val:
                         elem.set(attr, new_val)
         else:
             target_tag = key.split("/")[-1]
             for elem in root.iter():
                 if tag_name(elem) == target_tag:
-                    elem.text = new_val
-                    break
+                    if not find_val or (elem.text and elem.text.strip() == find_val):
+                        elem.text = new_val
+                        break
 
     tree.write(file_path, encoding="unicode", xml_declaration=False)
 
 
-# ── TXT ──────────────────────────────────────────────────────────────────────
+# ── TXT ───────────────────────────────────────────────────────────────────────
+# Strategy:
+#   1. Try  key = find_value  →  key = new_value   (exact value match)
+#   2. Try  key: find_value   →  key: new_value
+#   3. If find_value not given, replace whatever value the key currently has.
+#   4. For headings (key IS the text), do a whole-line exact match only.
+#   ⚠ NO global content.replace() fallback — prevents unintended replacements.
 
 def _apply_txt(file_path, reps):
     with open(file_path, "r", encoding="utf-8", errors="replace") as f:
         content = f.read()
 
     for rep in reps:
-        key = rep["key"]
-        new_val = rep["new_value"]
-        orig_val = rep.get("original_value", "")
+        key      = rep["key"]
+        new_val  = rep["new_value"]
+        find_val = _fv(rep)
 
-        # key = value
-        pattern = re.compile(
-            r"^(" + re.escape(key) + r"\s*=\s*)(.+)$", re.MULTILINE
+        # Build value sub-pattern: exact find_val or any non-empty value
+        val_pat = re.escape(find_val) if find_val else r".+"
+
+        # ── key = value ──
+        pat = re.compile(
+            r"^(" + re.escape(key) + r"\s*=\s*)" + val_pat + r"(\s*)$",
+            re.MULTILINE,
         )
-        if pattern.search(content):
-            content = pattern.sub(r"\g<1>" + new_val.replace("\\", r"\\"), content)
+        if pat.search(content):
+            content = pat.sub(lambda m: m.group(1) + new_val + m.group(2), content)
             continue
 
-        # key: value
-        pattern = re.compile(
-            r"^(" + re.escape(key) + r"\s*:\s*)(.+)$", re.MULTILINE
+        # ── key: value ──
+        pat = re.compile(
+            r"^(" + re.escape(key) + r"\s*:\s*)" + val_pat + r"(\s*)$",
+            re.MULTILINE,
         )
-        if pattern.search(content):
-            content = pattern.sub(r"\g<1>" + new_val.replace("\\", r"\\"), content)
+        if pat.search(content):
+            content = pat.sub(lambda m: m.group(1) + new_val + m.group(2), content)
             continue
 
-        # Heading / direct text replacement
-        if orig_val and orig_val in content:
-            content = content.replace(orig_val, new_val)
+        # ── Heading: whole-line exact match only ──
+        if find_val and key == find_val:
+            pat = re.compile(r"^" + re.escape(find_val) + r"\s*$", re.MULTILINE)
+            content = pat.sub(new_val, content)
+        # ← No fallback global replace.
 
     with open(file_path, "w", encoding="utf-8") as f:
         f.write(content)
-

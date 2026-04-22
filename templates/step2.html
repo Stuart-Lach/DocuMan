@@ -54,28 +54,58 @@ const PREVIOUS_VALUES = {{ previous_values | tojson }};
     <div class="row-number"></div>
 
     <div class="row-fields">
-      <div class="field-group">
-        <label>File</label>
-        <select class="form-select rep-file-select" name="rep_file" required></select>
+
+      <!-- Line 1: File + Key -->
+      <div class="row-line row-line-selects">
+        <div class="field-group">
+          <label>File</label>
+          <select class="form-select rep-file-select" name="rep_file" required></select>
+        </div>
+        <div class="field-group">
+          <label>Key / Column / Heading</label>
+          <select class="form-select rep-key-select" name="rep_key" required>
+            <option value="">— select file first —</option>
+          </select>
+        </div>
       </div>
 
-      <div class="field-group">
-        <label>Key / Heading / Column</label>
-        <select class="form-select rep-key-select" name="rep_key" required>
-          <option value="">— select file first —</option>
-        </select>
+      <!-- Line 2: Old Value → New Value -->
+      <div class="row-line row-line-values">
+        <div class="field-group">
+          <label>
+            Old Value
+            <span class="label-hint">(exact match — leave blank to replace any)</span>
+          </label>
+          <input type="text" class="form-input rep-find-input" name="rep_find_value"
+                 placeholder="Value to find…" autocomplete="off" />
+        </div>
+
+        <div class="diff-arrow-col">
+          <svg width="28" height="18" viewBox="0 0 28 18" fill="none">
+            <path d="M1 9h22M17 3l6 6-6 6" stroke="#DA291C" stroke-width="2"
+                  stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </div>
+
+        <div class="field-group">
+          <label>New Value</label>
+          <input type="text" class="form-input rep-value-input" name="rep_new_value"
+                 placeholder="Replacement value…" autocomplete="off"
+                 list="prev-values-list" required />
+        </div>
       </div>
 
-      <div class="field-group field-group-value">
-        <label>New Value</label>
-        <input type="text" class="form-input rep-value-input" name="rep_new_value"
-               placeholder="Enter replacement value…" autocomplete="off" list="prev-values-list" required />
-        <div class="current-value-hint"></div>
+      <!-- Live preview -->
+      <div class="row-preview" style="display:none">
+        <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><circle cx="6.5" cy="6.5" r="5.5" stroke="#58595B" stroke-width="1.2"/><path d="M6.5 4v3.5l2 1" stroke="#58595B" stroke-width="1.2" stroke-linecap="round"/></svg>
+        Preview: &nbsp;<span class="preview-key"></span>:
+        &nbsp;<span class="preview-old value-old-sm"></span>
+        &nbsp;→&nbsp;<span class="preview-new value-new-sm"></span>
       </div>
+
     </div>
 
     <!-- Hidden fields -->
-    <input type="hidden" name="rep_orig_value" class="rep-orig-value" value="" />
     <input type="hidden" name="rep_file_type" class="rep-file-type" value="" />
 
     <button type="button" class="btn-remove-row" onclick="removeReplacementRow(this)" title="Remove">
