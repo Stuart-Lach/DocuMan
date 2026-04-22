@@ -1,0 +1,130 @@
+{% extends "base.html" %}
+{% block content %}
+
+<div class="card">
+  <div class="card-header">
+    <h2 class="card-title">CSV Column Operations</h2>
+    <p class="card-subtitle">Optionally add columns from an external CSV or add a blank column to a target CSV inside the ZIP.</p>
+  </div>
+
+  <form method="POST" action="/step3" id="step3-form">
+
+    <!-- Operation selector -->
+    <div class="option-group">
+      <label class="option-card">
+        <input type="radio" name="csv_operation" value="skip" checked onchange="onCsvOpChange()" />
+        <div class="option-body">
+          <div class="option-title">Skip</div>
+          <div class="option-desc">No CSV column changes</div>
+        </div>
+      </label>
+
+      <label class="option-card {% if not csv_files %}disabled{% endif %}">
+        <input type="radio" name="csv_operation" value="join" onchange="onCsvOpChange()"
+               {% if not csv_files %}disabled{% endif %} />
+        <div class="option-body">
+          <div class="option-title">Join from external CSV</div>
+          <div class="option-desc">Upload a lookup CSV and merge columns into a target file</div>
+        </div>
+      </label>
+
+      <label class="option-card {% if not csv_files %}disabled{% endif %}">
+        <input type="radio" name="csv_operation" value="add_column" onchange="onCsvOpChange()"
+               {% if not csv_files %}disabled{% endif %} />
+        <div class="option-body">
+          <div class="option-title">Add new column</div>
+          <div class="option-desc">Append a blank column (with optional default) to a CSV in the ZIP</div>
+        </div>
+      </label>
+    </div>
+
+    {% if not csv_files %}
+    <div class="alert alert-info">No CSV files were found inside the ZIP. CSV operations are unavailable.</div>
+    {% endif %}
+
+    <!-- ── Join Section ── -->
+    <div id="join-section" class="op-section" style="display:none">
+      <div class="section-divider">Join Configuration</div>
+
+      <div class="form-row">
+        <div class="field-group">
+          <label>Target CSV (inside ZIP)</label>
+          <select class="form-select" name="target_csv" id="join-target-csv" onchange="fetchZipCsvHeaders(this.value, 'join-target-key')">
+            <option value="">— Select file —</option>
+            {% for f in csv_files %}
+            <option value="{{ f }}">{{ f }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="field-group">
+          <label>Join key in target</label>
+          <select class="form-select" name="join_key_target" id="join-target-key">
+            <option value="">— select target CSV first —</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="field-group">
+        <label>External CSV file</label>
+        <div class="file-upload-row">
+          <input type="file" id="external-csv-input" accept=".csv"
+                 onchange="uploadExternalCsv(this)" class="form-input file-input" />
+          <span id="ext-csv-status" class="upload-status"></span>
+        </div>
+      </div>
+
+      <div class="form-row" id="ext-join-row" style="display:none">
+        <div class="field-group">
+          <label>Join key in external CSV</label>
+          <select class="form-select" name="join_key_external" id="join-ext-key">
+            <option value="">— upload external CSV first —</option>
+          </select>
+        </div>
+        <div class="field-group">
+          <label>Columns to add <small>(hold Ctrl/⌘ for multiple)</small></label>
+          <select class="form-select" name="columns_to_add" id="columns-to-add" multiple size="5">
+          </select>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Add Column Section ── -->
+    <div id="add-col-section" class="op-section" style="display:none">
+      <div class="section-divider">Add Column Configuration</div>
+
+      <div class="form-row">
+        <div class="field-group">
+          <label>Target CSV (inside ZIP)</label>
+          <select class="form-select" name="target_csv" id="add-target-csv">
+            <option value="">— Select file —</option>
+            {% for f in csv_files %}
+            <option value="{{ f }}">{{ f }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="field-group">
+          <label>New column name</label>
+          <input type="text" class="form-input" name="new_column_name" placeholder="e.g. Status" />
+        </div>
+        <div class="field-group">
+          <label>Default value <small>(optional)</small></label>
+          <input type="text" class="form-input" name="default_value" placeholder="Leave blank for empty" />
+        </div>
+      </div>
+    </div>
+
+    <div class="form-actions form-actions-nav">
+      <a href="/step2" class="btn btn-ghost">← Back</a>
+      <button type="submit" class="btn btn-primary">Next: Review →</button>
+    </div>
+  </form>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', () => initStep3());
+</script>
+{% endblock %}
+

@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ZIP Heading Editor</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}" />
+</head>
+<body>
+
+  <!-- ── Header ── -->
+  <header class="site-header">
+    <div class="header-inner">
+      <div class="logo">
+        <svg width="34" height="34" viewBox="0 0 34 34" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <rect width="34" height="34" rx="7" fill="white"/>
+          <rect x="7" y="8"  width="20" height="4" rx="2" fill="#DA291C"/>
+          <rect x="7" y="15" width="14" height="4" rx="2" fill="#DA291C"/>
+          <rect x="7" y="22" width="17" height="4" rx="2" fill="#DA291C"/>
+        </svg>
+        <span class="logo-text">ZIP Heading Editor</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- ── Wizard Stepper ── -->
+  <div class="stepper-bar">
+    <div class="stepper-inner">
+      {% set labels = ['Upload ZIP', 'Replacements', 'CSV Join', 'Review', 'Download'] %}
+      {% for i in range(1, 6) %}
+        <div class="stepper-item {% if step == i %}active{% elif step > i %}done{% endif %}">
+          <div class="stepper-circle">
+            {% if step > i %}
+              <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+                <path d="M2.5 7.5l3 3 6-6" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            {% else %}
+              {{ i }}
+            {% endif %}
+          </div>
+          <div class="stepper-label">{{ labels[i-1] }}</div>
+        </div>
+        {% if i < 5 %}
+          <div class="stepper-connector {% if step > i %}done{% endif %}"></div>
+        {% endif %}
+      {% endfor %}
+    </div>
+  </div>
+
+  <!-- ── Main Content ── -->
+  <main class="main-content">
+    <div class="container">
+      {% block content %}{% endblock %}
+    </div>
+  </main>
+
+  <!-- ── Footer ── -->
+  <footer class="site-footer">
+    <p>ZIP Heading Editor &mdash; Local processing only. Your files never leave this machine.</p>
+  </footer>
+
+  <script src="{{ url_for('static', filename='js/wizard.js') }}"></script>
+  {% block scripts %}{% endblock %}
+</body>
+</html>
+

@@ -1,0 +1,102 @@
+{% extends "base.html" %}
+{% block content %}
+
+<!-- Embed data for JS -->
+<script>
+const SCAN_RESULTS = {{ scan_results | tojson }};
+const PREVIOUS_VALUES = {{ previous_values | tojson }};
+</script>
+
+<div class="card">
+  <div class="card-header">
+    <h2 class="card-title">Configure Replacements</h2>
+    <p class="card-subtitle">
+      Define what to find and replace inside the detected files.
+      {% if scan_results %}
+        Found <strong>{{ scan_results | length }}</strong> editable file(s) inside your ZIP.
+      {% else %}
+        No editable files were detected. You can still continue to the CSV Join step.
+      {% endif %}
+    </p>
+  </div>
+
+  {% if not scan_results %}
+  <div class="alert alert-info">
+    No supported files (txt, csv, json, xml, ini, cfg, yaml, yml) were found inside the ZIP.
+  </div>
+  {% endif %}
+
+  <form method="POST" action="/step2" id="step2-form">
+
+    <!-- Replacement rows container -->
+    <div id="replacements-container">
+      <!-- Rows added dynamically by JS -->
+    </div>
+
+    <div class="add-row-bar">
+      <button type="button" class="btn btn-secondary" onclick="addReplacementRow()" {% if not scan_results %}disabled{% endif %}>
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="7" stroke="currentColor" stroke-width="1.5"/><path d="M8 5v6M5 8h6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+        Add Replacement
+      </button>
+      <span class="row-count" id="row-count">0 rule(s)</span>
+    </div>
+
+    <div class="form-actions form-actions-nav">
+      <a href="/" class="btn btn-ghost">← Back</a>
+      <button type="submit" class="btn btn-primary">Next: CSV Join →</button>
+    </div>
+  </form>
+</div>
+
+<!-- ── Row Template (hidden) ── -->
+<template id="row-template">
+  <div class="replacement-row">
+    <div class="row-number"></div>
+
+    <div class="row-fields">
+      <div class="field-group">
+        <label>File</label>
+        <select class="form-select rep-file-select" name="rep_file" required></select>
+      </div>
+
+      <div class="field-group">
+        <label>Key / Heading / Column</label>
+        <select class="form-select rep-key-select" name="rep_key" required>
+          <option value="">— select file first —</option>
+        </select>
+      </div>
+
+      <div class="field-group field-group-value">
+        <label>New Value</label>
+        <input type="text" class="form-input rep-value-input" name="rep_new_value"
+               placeholder="Enter replacement value…" autocomplete="off" list="prev-values-list" required />
+        <div class="current-value-hint"></div>
+      </div>
+    </div>
+
+    <!-- Hidden fields -->
+    <input type="hidden" name="rep_orig_value" class="rep-orig-value" value="" />
+    <input type="hidden" name="rep_file_type" class="rep-file-type" value="" />
+
+    <button type="button" class="btn-remove-row" onclick="removeReplacementRow(this)" title="Remove">
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M3 3l10 10M13 3L3 13" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+    </button>
+  </div>
+</template>
+
+<!-- Datalist for autocomplete -->
+<datalist id="prev-values-list">
+  {% for v in previous_values %}
+  <option value="{{ v | e }}">
+  {% endfor %}
+</datalist>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+// This page's logic is in wizard.js → initStep2()
+document.addEventListener('DOMContentLoaded', () => initStep2());
+</script>
+{% endblock %}
+
