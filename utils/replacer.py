@@ -50,18 +50,43 @@ def apply_replacements(extract_dir, replacements):
             pass
 
 
+# ── CSV helpers (mirrors file_scanner) ───────────────────────────────────────
+
+def _csv_encoding(file_path):
+    for enc in ("utf-8-sig", "utf-8", "cp1252", "latin-1"):
+        try:
+            with open(file_path, "r", encoding=enc, errors="strict", newline="") as f:
+                f.read(8192)
+            return enc
+        except (UnicodeDecodeError, UnicodeError):
+            continue
+    return "latin-1"
+
+
+def _csv_dialect(file_path, encoding):
+    try:
+        with open(file_path, "r", encoding=encoding, errors="replace", newline="") as f:
+            sample = f.read(8192)
+        return csv.Sniffer().sniff(sample, delimiters=",;\t|")
+    except csv.Error:
+        return None
+
+
 # ── CSV ──────────────────────────────────────────────────────────────────────
 # Strategy:
-#   • key       = column name
-#   • find_value = the cell value to search for within that column
+#   • key        = column name
+#   • find_value = cell value to search for within that column
 #   • new_value  = replacement cell value
-#   • If find_value == key (i.e. user is renaming the header itself), rename it.
-#   • Otherwise replace only cells in the column that exactly match find_value.
+#   • If find_value == key  → rename the header itself
+#   • Otherwise             → replace matching cell values inside that column only
 
 def _apply_csv(file_path, reps):
-    with open(file_path, "r", encoding="utf-8", errors="replace", newline="") as f:
-        reader = csv.DictReader(f)
-        rows = list(reader)
+    enc     = _csv_encoding(file_path)
+    dialect = _csv_dialect(file_path, enc)
+
+    with open(file_path, "r", encoding=enc, errors="replace", newline="") as f:
+        reader  = csv.DictReader(f, dialect=dialect) if dialect else csv.DictReader(f)
+        rows    = list(reader)
         headers = list(reader.fieldnames or [])
 
     for rep in reps:
@@ -85,8 +110,9 @@ def _apply_csv(file_path, reps):
                 if row.get(col) == find_val:
                     row[col] = new_val
 
-    with open(file_path, "w", encoding="utf-8", newline="") as f:
-        writer = csv.DictWriter(f, fieldnames=headers)
+    with open(file_path, "w", encoding=enc, newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=headers,
+                                **({"dialect": dialect} if dialect else {}))
         writer.writeheader()
         writer.writerows(rows)
 

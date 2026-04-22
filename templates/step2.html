@@ -61,11 +61,21 @@ const PREVIOUS_VALUES = {{ previous_values | tojson }};
           <label>File</label>
           <select class="form-select rep-file-select" name="rep_file" required></select>
         </div>
+
         <div class="field-group">
           <label>Key / Column / Heading</label>
-          <select class="form-select rep-key-select" name="rep_key" required>
+
+          <!-- Shown in specific-file mode (value submitted via name="rep_key") -->
+          <select class="form-select rep-key-dropdown" name="rep_key">
             <option value="">— select file first —</option>
           </select>
+
+          <!-- Shown in "All files" mode (value submitted via name="rep_key_text") -->
+          <input type="text"
+                 class="form-input rep-key-textfield"
+                 name="rep_key_text"
+                 placeholder="e.g. asOfDate, Region, Title…"
+                 style="display:none" />
         </div>
       </div>
 
@@ -105,7 +115,7 @@ const PREVIOUS_VALUES = {{ previous_values | tojson }};
 
     </div>
 
-    <!-- Hidden fields -->
+    <!-- Hidden -->
     <input type="hidden" name="rep_file_type" class="rep-file-type" value="" />
 
     <button type="button" class="btn-remove-row" onclick="removeReplacementRow(this)" title="Remove">

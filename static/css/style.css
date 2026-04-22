@@ -431,6 +431,15 @@ a:hover { text-decoration: underline; }
 
 .label-hint { font-weight: 400; font-size: 0.72rem; color: var(--mid-gray); text-transform: none; letter-spacing: 0; }
 
+/* "All files" mode — highlight the key text input */
+.all-files-mode .rep-key-textfield {
+  border-color: var(--primary);
+  background: var(--primary-light);
+}
+.all-files-mode .rep-key-textfield:focus {
+  box-shadow: 0 0 0 3px rgba(218,41,28,0.15);
+}
+
 .btn-remove-row {
   background: none;
   border: none;

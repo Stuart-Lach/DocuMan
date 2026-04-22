@@ -4,6 +4,248 @@
 
 function initStep2() {
   updateRowCount();
+  // Always add one starter row (even with no scan results — "All" mode still works)
+  addReplacementRow();
+}
+
+function getFileInfo(filePath) {
+  if (typeof SCAN_RESULTS === 'undefined') return null;
+  return SCAN_RESULTS.find(r => r.file === filePath) || null;
+}
+
+function addReplacementRow() {
+  const container = document.getElementById('replacements-container');
+  if (!container) return;
+
+  const template = document.getElementById('row-template');
+  const clone    = template.content.cloneNode(true);
+  const row      = clone.querySelector('.replacement-row');
+
+  row.querySelector('.row-number').textContent = container.children.length + 1;
+
+  // ── Build file dropdown ──────────────────────────────────────────────────
+  const fileSelect = row.querySelector('.rep-file-select');
+
+  // "All selected files" is always the first option
+  const allOpt       = document.createElement('option');
+  allOpt.value       = '_ALL_';
+  allOpt.textContent = '⊕  All selected files';
+  fileSelect.appendChild(allOpt);
+
+  const hasScan = typeof SCAN_RESULTS !== 'undefined' && SCAN_RESULTS.length > 0;
+  if (hasScan) {
+    const sep      = document.createElement('option');
+    sep.disabled   = true;
+    sep.textContent = '──────────────────────────';
+    fileSelect.appendChild(sep);
+    SCAN_RESULTS.forEach(sr => {
+      const opt       = document.createElement('option');
+      opt.value       = sr.file;
+      opt.textContent = sr.file + '  [' + sr.type.toUpperCase() + ']';
+      fileSelect.appendChild(opt);
+    });
+  }
+
+  fileSelect.addEventListener('change', function () { onFileChange(this); });
+
+  // ── Key dropdown (specific-file mode, name="rep_key") ────────────────────
+  const keyDropdown = row.querySelector('.rep-key-dropdown');
+  keyDropdown.addEventListener('change', function () {
+    const chosen = this.options[this.selectedIndex];
+    row.querySelector('.rep-find-input').value = chosen ? (chosen.dataset.origVal || '') : '';
+    updatePreview(row);
+  });
+
+  // ── Key text input (All-files mode, name="rep_key_text") ─────────────────
+  row.querySelector('.rep-key-textfield').addEventListener('input', function () {
+    updatePreview(row);
+  });
+
+  // ── Autocomplete + preview ────────────────────────────────────────────────
+  row.querySelector('.rep-value-input').setAttribute('list', 'prev-values-list');
+  row.querySelector('.rep-find-input').addEventListener('input', function () {
+    updatePreview(this.closest('.replacement-row'));
+  });
+  row.querySelector('.rep-value-input').addEventListener('input', function () {
+    updatePreview(this.closest('.replacement-row'));
+  });
+
+  container.appendChild(clone);
+
+  // Default to first real file if available, else stay on "All"
+  fileSelect.selectedIndex = hasScan ? 2 : 0;
+  onFileChange(fileSelect);
+
+  updateRowCount();
+  renumberRows();
+}
+
+function onFileChange(select) {
+  const row          = select.closest('.replacement-row');
+  const keyDropdown  = row.querySelector('.rep-key-dropdown');
+  const keyTextField = row.querySelector('.rep-key-textfield');
+  const fileTypeInp  = row.querySelector('.rep-file-type');
+  const findInput    = row.querySelector('.rep-find-input');
+
+  findInput.value = '';
+
+  if (select.value === '_ALL_') {
+    // ── All-files mode: free-text key input ──────────────────────────────
+    keyDropdown.style.display  = 'none';
+    keyTextField.style.display = '';
+    keyTextField.value         = '';
+    fileTypeInp.value          = 'all';
+    row.classList.add('all-files-mode');
+    updatePreview(row);
+    return;
+  }
+
+  // ── Specific-file mode: populated dropdown ────────────────────────────────
+  keyTextField.style.display = 'none';
+  keyDropdown.style.display  = '';
+  row.classList.remove('all-files-mode');
+
+  const info = getFileInfo(select.value);
+  fileTypeInp.value = info ? info.type : '';
+
+  keyDropdown.innerHTML = '<option value="">— select key / column —</option>';
+
+  if (info && info.keys && info.keys.length > 0) {
+    info.keys.forEach(k => {
+      const opt           = document.createElement('option');
+      opt.value           = k.key;
+      opt.dataset.origVal = k.original_value || '';
+      opt.textContent     = k.display || k.key;
+      keyDropdown.appendChild(opt);
+    });
+    keyDropdown.selectedIndex = 1;
+    const first = keyDropdown.options[1];
+    if (first) findInput.value = first.dataset.origVal || '';
+  }
+
+  updatePreview(row);
+}
+
+function updatePreview(row) {
+  const isAllMode  = row.classList.contains('all-files-mode');
+  const keyEl      = isAllMode
+    ? row.querySelector('.rep-key-textfield')
+    : row.querySelector('.rep-key-dropdown');
+  const findInput  = row.querySelector('.rep-find-input');
+  const newInput   = row.querySelector('.rep-value-input');
+  const previewBar = row.querySelector('.row-preview');
+
+  const key    = keyEl     ? keyEl.value.trim()    : '';
+  const oldVal = findInput ? findInput.value.trim() : '';
+  const newVal = newInput  ? newInput.value.trim()  : '';
+
+  if (!key || (!oldVal && !newVal)) {
+    previewBar.style.display = 'none';
+    return;
+  }
+
+  const fileSelect = row.querySelector('.rep-file-select');
+  const fileLabel  = fileSelect && fileSelect.value === '_ALL_'
+    ? 'all files'
+    : (fileSelect ? fileSelect.value.split('/').pop() : '');
+
+  previewBar.style.display = 'flex';
+  previewBar.querySelector('.preview-key').textContent =
+    fileLabel ? key + '  (' + fileLabel + ')' : key;
+  previewBar.querySelector('.preview-old').textContent = oldVal || '(any)';
+  previewBar.querySelector('.preview-new').textContent = newVal || '…';
+}
+
+function removeReplacementRow(btn) {
+  btn.closest('.replacement-row').remove();
+  renumberRows();
+  updateRowCount();
+}
+
+function renumberRows() {
+  document.querySelectorAll('#replacements-container .replacement-row')
+    .forEach((row, i) => {
+      const num = row.querySelector('.row-number');
+      if (num) num.textContent = i + 1;
+    });
+}
+
+function updateRowCount() {
+  const counter = document.getElementById('row-count');
+  if (!counter) return;
+  const n = document.querySelectorAll('#replacements-container .replacement-row').length;
+  counter.textContent = n + ' rule' + (n === 1 ? '' : 's');
+}
+
+
+// ── Step 3: CSV Join ──────────────────────────────────────────────────────────
+
+function initStep3() { onCsvOpChange(); }
+
+function onCsvOpChange() {
+  const radios = document.querySelectorAll('input[name="csv_operation"]');
+  let selected = 'skip';
+  radios.forEach(r => { if (r.checked) selected = r.value; });
+  const joinSection   = document.getElementById('join-section');
+  const addColSection = document.getElementById('add-col-section');
+  if (joinSection)   joinSection.style.display  = selected === 'join'       ? '' : 'none';
+  if (addColSection) addColSection.style.display = selected === 'add_column' ? '' : 'none';
+}
+
+async function uploadExternalCsv(input) {
+  if (!input.files.length) return;
+  const status = document.getElementById('ext-csv-status');
+  if (status) status.textContent = 'Uploading…';
+  const formData = new FormData();
+  formData.append('csv_file', input.files[0]);
+  try {
+    const resp = await fetch('/api/upload-external-csv', { method: 'POST', body: formData });
+    const data = await resp.json();
+    if (data.success) {
+      if (status) status.textContent = '✓ Loaded (' + data.headers.length + ' columns)';
+      populateExtHeaders(data.headers);
+      document.getElementById('ext-join-row').style.display = '';
+    } else {
+      if (status) status.textContent = 'Upload failed: ' + (data.error || 'Unknown error');
+    }
+  } catch (e) {
+    if (status) status.textContent = 'Upload failed.';
+  }
+}
+
+function populateExtHeaders(headers) {
+  [document.getElementById('join-ext-key'),
+   document.getElementById('columns-to-add')].forEach(sel => {
+    if (!sel) return;
+    sel.innerHTML = '';
+    headers.forEach(h => {
+      const opt = document.createElement('option');
+      opt.value = h; opt.textContent = h;
+      sel.appendChild(opt);
+    });
+  });
+}
+
+async function fetchZipCsvHeaders(fileRel, targetSelectId) {
+  if (!fileRel) return;
+  const sel = document.getElementById(targetSelectId);
+  if (!sel) return;
+  try {
+    const resp = await fetch('/api/zip-csv-headers?file=' + encodeURIComponent(fileRel));
+    const data = await resp.json();
+    sel.innerHTML = '<option value="">— select column —</option>';
+    (data.headers || []).forEach(h => {
+      const opt = document.createElement('option');
+      opt.value = h; opt.textContent = h;
+      sel.appendChild(opt);
+    });
+  } catch (e) { /* ignore */ }
+}
+
+// ── Step 2: Replacements ─────────────────────────────────────────────────────
+
+function initStep2() {
+  updateRowCount();
   if (typeof SCAN_RESULTS !== 'undefined' && SCAN_RESULTS.length > 0) {
     addReplacementRow();
   }

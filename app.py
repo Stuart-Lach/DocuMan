@@ -197,29 +197,53 @@ def step2_post():
         return redirect(url_for("index"))
 
     rep_files      = request.form.getlist("rep_file")
-    rep_keys       = request.form.getlist("rep_key")
+    rep_keys       = request.form.getlist("rep_key")        # from dropdown (specific file)
+    rep_keys_all   = request.form.getlist("rep_key_text")   # from text input  (All mode)
     rep_find_vals  = request.form.getlist("rep_find_value")
     rep_values     = request.form.getlist("rep_new_value")
     rep_types      = request.form.getlist("rep_file_type")
 
-    data = load_data(sid)
+    data            = load_data(sid)
+    all_scan        = data.get("scan_results", [])
+    selected        = data.get("selected_files", None)
+    active_files    = set(selected) if selected is not None else {r["file"] for r in all_scan}
+    file_type_map   = {r["file"]: r["type"] for r in all_scan}
     previous_values = data.get("previous_values", [])
-    replacements = []
+    replacements    = []
 
     for i in range(len(rep_files)):
-        key      = rep_keys[i]      if i < len(rep_keys)      else ""
-        val      = rep_values[i]    if i < len(rep_values)    else ""
-        find_val = rep_find_vals[i] if i < len(rep_find_vals) else ""
+        # Resolve key: prefer the text-input value when in "All" mode
+        target = rep_files[i] if i < len(rep_files) else ""
+        key    = (rep_keys_all[i] if i < len(rep_keys_all) else "").strip() \
+                 if target == "_ALL_" else \
+                 (rep_keys[i] if i < len(rep_keys) else "").strip()
+        val       = (rep_values[i]    if i < len(rep_values)    else "").strip()
+        find_val  = (rep_find_vals[i] if i < len(rep_find_vals) else "").strip()
+
         if not key or not val:
             continue
-        replacements.append({
-            "file":           rep_files[i],
-            "key":            key,
-            "find_value":     find_val,
-            "original_value": find_val,   # kept for step4 display
-            "new_value":      val,
-            "file_type":      rep_types[i] if i < len(rep_types) else "",
-        })
+
+        if target == "_ALL_":
+            # Expand to every active file
+            for sel_file in sorted(active_files):
+                replacements.append({
+                    "file":           sel_file,
+                    "key":            key,
+                    "find_value":     find_val,
+                    "original_value": find_val,
+                    "new_value":      val,
+                    "file_type":      file_type_map.get(sel_file, ""),
+                })
+        else:
+            replacements.append({
+                "file":           target,
+                "key":            key,
+                "find_value":     find_val,
+                "original_value": find_val,
+                "new_value":      val,
+                "file_type":      rep_types[i] if i < len(rep_types) else "",
+            })
+
         if val not in previous_values:
             previous_values.append(val)
 

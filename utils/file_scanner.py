@@ -52,22 +52,53 @@ def _scan_file(file_path, relative_path, ext):
     return None
 
 
+# ── CSV helpers ──────────────────────────────────────────────────────────────
+
+def _csv_encoding(file_path):
+    """Try common encodings; return the first that decodes the file cleanly."""
+    for enc in ("utf-8-sig", "utf-8", "cp1252", "latin-1"):
+        try:
+            with open(file_path, "r", encoding=enc, errors="strict", newline="") as f:
+                f.read(8192)
+            return enc
+        except (UnicodeDecodeError, UnicodeError):
+            continue
+    return "latin-1"  # always works
+
+
+def _csv_dialect(file_path, encoding):
+    """Sniff the CSV delimiter.  Falls back to None (= comma)."""
+    try:
+        with open(file_path, "r", encoding=encoding, errors="replace", newline="") as f:
+            sample = f.read(8192)
+        return csv.Sniffer().sniff(sample, delimiters=",;\t|")
+    except csv.Error:
+        return None
+
+
 # ── CSV ─────────────────────────────────────────────────────────────────────
 
 def _scan_csv(file_path, relative_path):
-    with open(file_path, "r", encoding="utf-8", errors="replace", newline="") as f:
-        reader = csv.reader(f)
-        headers = next(reader, [])
-        first_row = next(reader, [])   # peek at first data row for sample values
+    enc     = _csv_encoding(file_path)
+    dialect = _csv_dialect(file_path, enc)
+    try:
+        with open(file_path, "r", encoding=enc, errors="replace", newline="") as f:
+            reader    = csv.reader(f, dialect) if dialect else csv.reader(f)
+            headers   = next(reader, [])
+            first_row = next(reader, [])
+    except Exception:
+        return None
+
     keys = []
     for i, h in enumerate(headers):
-        if not h.strip():
+        h = h.strip().lstrip("\ufeff")   # strip any stray BOM
+        if not h:
             continue
         sample = first_row[i].strip() if i < len(first_row) else ""
         keys.append({
-            "key": h,
-            "original_value": sample,  # first data value — shown as "Old Value" hint
-            "display": f"Column: {h}" + (f"  (e.g. \"{sample}\")" if sample else ""),
+            "key":            h,
+            "original_value": sample,
+            "display":        f"Column: {h}" + (f'  (e.g. "{sample}")' if sample else ""),
         })
     return {"file": relative_path, "type": "csv", "keys": keys[:MAX_KEYS]}
 
