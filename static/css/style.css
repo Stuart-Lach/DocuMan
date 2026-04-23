@@ -429,6 +429,24 @@ a:hover { text-decoration: underline; }
 }
 .preview-key { font-family: monospace; font-weight: 700; color: var(--dark); }
 
+/* Line 2 of row: single full-width change input */
+.row-line-change { flex-wrap: nowrap; }
+.field-group-full { flex: 1 1 100%; min-width: 0; }
+.field-group-full .form-input {
+  font-family: monospace;
+  font-size: 0.92rem;
+  letter-spacing: 0.2px;
+}
+/* Inline code in label */
+.label-hint code {
+  background: #F0F0F0;
+  border: 1px solid #E0E0E0;
+  border-radius: 3px;
+  padding: 1px 5px;
+  font-size: 0.78rem;
+  color: var(--dark);
+}
+
 .label-hint { font-weight: 400; font-size: 0.72rem; color: var(--mid-gray); text-transform: none; letter-spacing: 0; }
 
 /* "All files" mode — highlight the key text input */

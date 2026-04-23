@@ -64,6 +64,20 @@ def save_history(values):
         json.dump(existing, f, ensure_ascii=False)
 
 
+def parse_change_string(text):
+    """
+    Parse  'old value -> new value'  into  (old_value, new_value).
+    The separator is  ' -> '  (space-dash-gt-space).
+    If no separator is found the whole string is the new value (old = '', meaning match any).
+    """
+    text = text.strip()
+    sep  = " -> "
+    if sep in text:
+        idx = text.index(sep)
+        return text[:idx].strip(), text[idx + len(sep):].strip()
+    return "", text   # no arrow → treat as new-value only
+
+
 # ── Step 1 – Upload ──────────────────────────────────────────────────────────
 
 @app.route("/")
@@ -197,10 +211,9 @@ def step2_post():
         return redirect(url_for("index"))
 
     rep_files      = request.form.getlist("rep_file")
-    rep_keys       = request.form.getlist("rep_key")        # from dropdown (specific file)
-    rep_keys_all   = request.form.getlist("rep_key_text")   # from text input  (All mode)
-    rep_find_vals  = request.form.getlist("rep_find_value")
-    rep_values     = request.form.getlist("rep_new_value")
+    rep_keys       = request.form.getlist("rep_key")        # dropdown (specific-file mode)
+    rep_keys_all   = request.form.getlist("rep_key_text")   # text input  (All-files mode)
+    rep_changes    = request.form.getlist("rep_change")     # "old -> new" strings
     rep_types      = request.form.getlist("rep_file_type")
 
     data            = load_data(sid)
@@ -212,40 +225,38 @@ def step2_post():
     replacements    = []
 
     for i in range(len(rep_files)):
-        # Resolve key: prefer the text-input value when in "All" mode
-        target = rep_files[i] if i < len(rep_files) else ""
-        key    = (rep_keys_all[i] if i < len(rep_keys_all) else "").strip() \
-                 if target == "_ALL_" else \
-                 (rep_keys[i] if i < len(rep_keys) else "").strip()
-        val       = (rep_values[i]    if i < len(rep_values)    else "").strip()
-        find_val  = (rep_find_vals[i] if i < len(rep_find_vals) else "").strip()
+        target     = rep_files[i] if i < len(rep_files) else ""
+        key        = (rep_keys_all[i] if i < len(rep_keys_all) else "").strip() \
+                     if target == "_ALL_" else \
+                     (rep_keys[i]     if i < len(rep_keys)     else "").strip()
+        change_txt = (rep_changes[i]  if i < len(rep_changes)  else "").strip()
 
-        if not key or not val:
+        if not key or not change_txt:
             continue
 
-        if target == "_ALL_":
-            # Expand to every active file
-            for sel_file in sorted(active_files):
-                replacements.append({
-                    "file":           sel_file,
-                    "key":            key,
-                    "find_value":     find_val,
-                    "original_value": find_val,
-                    "new_value":      val,
-                    "file_type":      file_type_map.get(sel_file, ""),
-                })
-        else:
-            replacements.append({
-                "file":           target,
+        find_val, new_val = parse_change_string(change_txt)
+        if not new_val:
+            continue
+
+        # Store full "old -> new" string for autocomplete history
+        if change_txt not in previous_values:
+            previous_values.append(change_txt)
+
+        def make_rep(file_path, ftype=""):
+            return {
+                "file":           file_path,
                 "key":            key,
                 "find_value":     find_val,
                 "original_value": find_val,
-                "new_value":      val,
-                "file_type":      rep_types[i] if i < len(rep_types) else "",
-            })
+                "new_value":      new_val,
+                "file_type":      ftype,
+            }
 
-        if val not in previous_values:
-            previous_values.append(val)
+        if target == "_ALL_":
+            for sel_file in sorted(active_files):
+                replacements.append(make_rep(sel_file, file_type_map.get(sel_file, "")))
+        else:
+            replacements.append(make_rep(target, rep_types[i] if i < len(rep_types) else ""))
 
     data["replacements"] = replacements
     data["previous_values"] = previous_values

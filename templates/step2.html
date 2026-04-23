@@ -11,7 +11,7 @@ const PREVIOUS_VALUES = {{ previous_values | tojson }};
   <div class="card-header">
     <h2 class="card-title">Configure Replacements</h2>
     <p class="card-subtitle">
-      Define what to find and replace inside the detected files.
+      Select a field / column, then paste the change as <code>old value -&gt; new value</code>.
       {% if scan_results %}
         Found <strong>{{ scan_results | length }}</strong> editable file(s) inside your ZIP.
       {% else %}
@@ -28,15 +28,12 @@ const PREVIOUS_VALUES = {{ previous_values | tojson }};
 
   <form method="POST" action="/step2" id="step2-form">
 
-    <!-- Replacement rows container -->
-    <div id="replacements-container">
-      <!-- Rows added dynamically by JS -->
-    </div>
+    <div id="replacements-container"></div>
 
     <div class="add-row-bar">
-      <button type="button" class="btn btn-secondary" onclick="addReplacementRow()" {% if not scan_results %}disabled{% endif %}>
+      <button type="button" class="btn btn-secondary" onclick="addReplacementRow()">
         <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="7" stroke="currentColor" stroke-width="1.5"/><path d="M8 5v6M5 8h6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
-        Add Replacement
+        Add another change
       </button>
       <span class="row-count" id="row-count">0 rule(s)</span>
     </div>
@@ -48,14 +45,14 @@ const PREVIOUS_VALUES = {{ previous_values | tojson }};
   </form>
 </div>
 
-<!-- ── Row Template (hidden) ── -->
+<!-- ── Row Template ── -->
 <template id="row-template">
   <div class="replacement-row">
     <div class="row-number"></div>
 
     <div class="row-fields">
 
-      <!-- Line 1: File + Key -->
+      <!-- Line 1: File + Field/Key/Column -->
       <div class="row-line row-line-selects">
         <div class="field-group">
           <label>File</label>
@@ -63,59 +60,50 @@ const PREVIOUS_VALUES = {{ previous_values | tojson }};
         </div>
 
         <div class="field-group">
-          <label>Key / Column / Heading</label>
+          <label>Field / Key / Column</label>
 
-          <!-- Shown in specific-file mode (value submitted via name="rep_key") -->
+          <!-- Specific-file mode (submitted as rep_key) -->
           <select class="form-select rep-key-dropdown" name="rep_key">
             <option value="">— select file first —</option>
           </select>
 
-          <!-- Shown in "All files" mode (value submitted via name="rep_key_text") -->
+          <!-- All-files mode (submitted as rep_key_text) -->
           <input type="text"
                  class="form-input rep-key-textfield"
                  name="rep_key_text"
-                 placeholder="e.g. asOfDate, Region, Title…"
+                 placeholder="e.g. asOfDate, Region, portfolioIdentifier…"
                  style="display:none" />
         </div>
       </div>
 
-      <!-- Line 2: Old Value → New Value -->
-      <div class="row-line row-line-values">
-        <div class="field-group">
+      <!-- Line 2: Single "old -> new" change input -->
+      <div class="row-line row-line-change">
+        <div class="field-group field-group-full">
           <label>
-            Old Value
-            <span class="label-hint">(exact match — leave blank to replace any)</span>
+            Change
+            <span class="label-hint">— paste as: &nbsp;<code>old value -&gt; new value</code></span>
           </label>
-          <input type="text" class="form-input rep-find-input" name="rep_find_value"
-                 placeholder="Value to find…" autocomplete="off" />
-        </div>
-
-        <div class="diff-arrow-col">
-          <svg width="28" height="18" viewBox="0 0 28 18" fill="none">
-            <path d="M1 9h22M17 3l6 6-6 6" stroke="#DA291C" stroke-width="2"
-                  stroke-linecap="round" stroke-linejoin="round"/>
-          </svg>
-        </div>
-
-        <div class="field-group">
-          <label>New Value</label>
-          <input type="text" class="form-input rep-value-input" name="rep_new_value"
-                 placeholder="Replacement value…" autocomplete="off"
-                 list="prev-values-list" required />
+          <input type="text"
+                 class="form-input rep-change-input"
+                 name="rep_change"
+                 placeholder="e.g.  07/31/2025 -> 12/31/2025"
+                 autocomplete="off"
+                 list="prev-changes-list"
+                 required />
         </div>
       </div>
 
       <!-- Live preview -->
       <div class="row-preview" style="display:none">
         <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><circle cx="6.5" cy="6.5" r="5.5" stroke="#58595B" stroke-width="1.2"/><path d="M6.5 4v3.5l2 1" stroke="#58595B" stroke-width="1.2" stroke-linecap="round"/></svg>
-        Preview: &nbsp;<span class="preview-key"></span>:
+        &nbsp;<span class="preview-key"></span>:
         &nbsp;<span class="preview-old value-old-sm"></span>
-        &nbsp;→&nbsp;<span class="preview-new value-new-sm"></span>
+        &nbsp;<svg width="18" height="10" viewBox="0 0 18 10" fill="none"><path d="M1 5h14M10 1l4 4-4 4" stroke="#DA291C" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>&nbsp;
+        <span class="preview-new value-new-sm"></span>
       </div>
 
     </div>
 
-    <!-- Hidden -->
     <input type="hidden" name="rep_file_type" class="rep-file-type" value="" />
 
     <button type="button" class="btn-remove-row" onclick="removeReplacementRow(this)" title="Remove">
@@ -124,8 +112,8 @@ const PREVIOUS_VALUES = {{ previous_values | tojson }};
   </div>
 </template>
 
-<!-- Datalist for autocomplete -->
-<datalist id="prev-values-list">
+<!-- Autocomplete: stores full "old -> new" strings -->
+<datalist id="prev-changes-list">
   {% for v in previous_values %}
   <option value="{{ v | e }}">
   {% endfor %}
@@ -135,8 +123,6 @@ const PREVIOUS_VALUES = {{ previous_values | tojson }};
 
 {% block scripts %}
 <script>
-// This page's logic is in wizard.js → initStep2()
 document.addEventListener('DOMContentLoaded', () => initStep2());
 </script>
 {% endblock %}
-
